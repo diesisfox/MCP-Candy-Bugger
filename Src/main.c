@@ -55,6 +55,10 @@
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
 
+SPI_HandleTypeDef hspi1;
+DMA_HandleTypeDef hdma_spi1_rx;
+DMA_HandleTypeDef hdma_spi1_tx;
+
 UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart2_rx;
 DMA_HandleTypeDef hdma_usart2_tx;
@@ -86,6 +90,7 @@ static void MX_DMA_Init(void);
 static void MX_CAN1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_WWDG_Init(void);
+static void MX_SPI1_Init(void);
 void doProcessCan(void const * argument);
 void doProcessUart(void const * argument);
 void doHousekeeping(void const * argument);
@@ -489,6 +494,7 @@ int main(void)
   MX_CAN1_Init();
   MX_USART2_UART_Init();
   MX_WWDG_Init();
+  MX_SPI1_Init();
 
   /* USER CODE BEGIN 2 */
   Serial2_begin();
@@ -669,6 +675,31 @@ static void MX_CAN1_Init(void)
 
 }
 
+/* SPI1 init function */
+static void MX_SPI1_Init(void)
+{
+
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 7;
+  hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+}
+
 /* USART2 init function */
 static void MX_USART2_UART_Init(void)
 {
@@ -715,6 +746,12 @@ static void MX_DMA_Init(void)
   LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_DMA1);
 
   /* DMA interrupt init */
+  /* DMA1_Channel2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
   /* DMA1_Channel6_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel6_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel6_IRQn);
@@ -750,15 +787,26 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA0 PA1 PA3 PA4 
-                           PA5 PA6 PA7 PA8 
-                           PA9 PA10 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_3|GPIO_PIN_4 
-                          |GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8 
-                          |GPIO_PIN_9|GPIO_PIN_10;
+  /*Configure GPIO pins : PA0 PA4 PA8 PA9 
+                           PA10 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_4|GPIO_PIN_8|GPIO_PIN_9 
+                          |GPIO_PIN_10;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : IT_Pin */
+  GPIO_InitStruct.Pin = IT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(IT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : CS_Pin */
+  GPIO_InitStruct.Pin = CS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  HAL_GPIO_Init(CS_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB0 PB1 PB3 PB4 
                            PB5 PB6 PB7 */
@@ -773,6 +821,9 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(CS_GPIO_Port, CS_Pin, GPIO_PIN_SET);
 
 }
 
@@ -900,7 +951,7 @@ void doProcessUart(void const * argument)
 /* doHousekeeping function */
 void doHousekeeping(void const * argument)
 {
-	/* USER CODE BEGIN doHousekeeping */
+  /* USER CODE BEGIN doHousekeeping */
 
 	/*JSON goodness*/
 	static uint8_t sentmsg1[] = "{\"type\":\"sent\",\"count\":";
